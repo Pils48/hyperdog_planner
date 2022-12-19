@@ -7,6 +7,7 @@ This work is licensed under the terms of the MIT license, see <https://opensourc
 #!/usr/bin/env python3
 
 import time
+import geometry_msgs.msg
 import numpy as np
 import rospy
 from random import random
@@ -324,8 +325,8 @@ def handle_planning_request(req):
     if G.success:
         print("Success")
         path = dijkstra(G)
-        print(path)
-        return [], True
+        path_msg = [geometry_msgs.msg.Point(path[i][0], path[i][1], 0) for i in range(len(path))]
+        return path_msg, True
 
 
 def start_planner_node():

@@ -1,5 +1,5 @@
-geometry_msgs/Pose start
-geometry_msgs/Pose goal
+geometry_msgs/Point start
+geometry_msgs/Point goal
 ---
-geometry_msgs/Pose[] trajectory
+geometry_msgs/Point[] trajectory
 bool success
