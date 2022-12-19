@@ -16,6 +16,7 @@ from matplotlib import collections  as mc
 from collections import deque
 
 from hyperdog_planner.srv import plan_request
+from hyperdog_planner.msg import JoyCtrlCmds
 
 class Line():
     ''' Define line '''
@@ -311,6 +312,47 @@ def pathSearch(startpos, endpos, obstacles, n_iter, radius, stepSize):
         # plot(G, obstacles, radius, path)
         return path
 
+class Planner_Node():
+    def __init__(self, set_msgs, send_msgs, node_name = 'hyperdog_planner'):
+        self.pub = self.node.create_publisher(
+                            self.pub_interface,
+                            self.pub_name,
+                            self.pub_queueSize)
+        self.pub_name = 'hyperdog_joy_ctrl_cmd'
+        self.pub_interface = JoyCtrlCmds   #hyperdog_msgs.msg.Geometry
+        self.pub_timer_period = 0.001
+        self.pub_callback = self._pub_callback
+        self.pub_timer = self.node.create_timer(self.pub_timer_period, self.pub_callback)
+        self.pub_queueSize = 12
+        self.obstacles = []
+
+    def _pub_callback(self):
+        msg = JoyCtrlCmds()
+        print("Planning trajectory...")
+        startpos = (0., 0.)
+        endpos = (5., 5.)
+        n_iter = 200
+        radius = 0.5
+        stepSize = 0.2
+        self.obstacles = [(1., 1.), (2., 2.)]
+        # G = RRT_star(startpos, endpos, self.obstacles, n_iter, radius, stepSize)
+        # if G.success:
+        #     print("Success")
+        #     path = dijkstra(G)
+        #     path_msg = [geometry_msgs.msg.Point(path[i][0], path[i][1], 0) for i in range(len(path))]
+        #     return path_msg, True
+        self.pub.publish(msg)
+
+    def start_node(self):
+        rospy.init_node(self.node_name)
+        print("Planner node has been initialized")        
+        while True:
+            pass
+    
+    def addCollisionObject(self, obstacles):
+        for obstacle in obstacles:
+            self.obstacles.append()
+
 
 def handle_planning_request(req):
     print("Planning trajectory...")
@@ -326,16 +368,11 @@ def handle_planning_request(req):
         print("Success")
         path = dijkstra(G)
         path_msg = [geometry_msgs.msg.Point(path[i][0], path[i][1], 0) for i in range(len(path))]
+        # for point in path:
         return path_msg, True
 
 
-def start_planner_node():
-    rospy.init_node('hyperdog_planner')
-    s = rospy.Service('plan_trajectory', plan_request, handle_planning_request)
-    print("Planner node has been started")
-    rospy.spin()
-
-
 if __name__ == "__main__":
-    start_planner_node()
+    planner_node = Planner_Node()
+    planner_node.start_node()
 
