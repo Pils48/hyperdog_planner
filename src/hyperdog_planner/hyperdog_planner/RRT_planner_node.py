@@ -1,22 +1,15 @@
-'''
-MIT License
-Copyright (c) 2019 Fanjin Zeng
-This work is licensed under the terms of the MIT license, see <https://opensource.org/licenses/MIT>.  
-'''
-
 #!/usr/bin/env python3
 
 import time
 import geometry_msgs.msg
 import numpy as np
-import rospy
+import rclpy
 from random import random
 import matplotlib.pyplot as plt
 from matplotlib import collections  as mc
 from collections import deque
+from hyperdog_msgs.msg import JoyCtrlCmds
 
-from hyperdog_planner.srv import plan_request
-from hyperdog_planner.msg import JoyCtrlCmds
 
 class Line():
     ''' Define line '''
@@ -313,66 +306,80 @@ def pathSearch(startpos, endpos, obstacles, n_iter, radius, stepSize):
         return path
 
 class Planner_Node():
-    def __init__(self, set_msgs, send_msgs, node_name = 'hyperdog_planner'):
+    def __init__(self, node_name = 'hyperdog_planner'):
+        rclpy.init(args=None)
+        self.node = rclpy.create_node(node_name)
+        print("Planner node has been initialized")
+        self.pub_name = 'hyperdog_joy_ctrl_cmd'
+        self.pub_queueSize = 12
+        self.pub_interface = JoyCtrlCmds   #hyperdog_msgs.msg.Geometry
+        self.pub_timer_period = 0.01
+        self.pub_callback = self._pub_callback
+        self.pub_timer = self.node.create_timer(self.pub_timer_period, self.pub_callback)
+        self.obstacles = []
         self.pub = self.node.create_publisher(
                             self.pub_interface,
                             self.pub_name,
-                            self.pub_queueSize)
-        self.pub_name = 'hyperdog_joy_ctrl_cmd'
-        self.pub_interface = JoyCtrlCmds   #hyperdog_msgs.msg.Geometry
-        self.pub_timer_period = 0.001
-        self.pub_callback = self._pub_callback
-        self.pub_timer = self.node.create_timer(self.pub_timer_period, self.pub_callback)
-        self.pub_queueSize = 12
-        self.obstacles = []
+                            self.pub_queueSize
+                        )
+        rclpy.spin(self.node)
+
+
+    def form_control_msg(self, **kwargs):
+        msg = JoyCtrlCmds()
+        msg.states[0] = kwargs["start"]
+        msg.states[1] = kwargs["walk"]
+        msg.states[2] = kwargs["side_start"]
+        msg.gait_type = kwargs["gait_type"] 
+        pose = geometry_msgs.msg.Pose()
+        pose.position.x = kwargs["x"]
+        pose.position.y = kwargs["y"]
+        pose.position.z = kwargs["height"]
+        pose.orientation.w = kwargs["q_w"]
+        pose.orientation.x = kwargs["q_x"]
+        pose.orientation.y = kwargs["q_y"]
+        pose.orientation.z = kwargs["q_z"]
+        msg.pose = pose
+        v = geometry_msgs.msg.Vector3()
+        v.x = kwargs["slant_x"]
+        v.y = kwargs["slant_y"]
+        v.z = kwargs["step_height"]
+        msg.gait_step = v
+        return msg
+
 
     def _pub_callback(self):
-        msg = JoyCtrlCmds()
-        print("Planning trajectory...")
-        startpos = (0., 0.)
-        endpos = (5., 5.)
-        n_iter = 200
-        radius = 0.5
-        stepSize = 0.2
-        self.obstacles = [(1., 1.), (2., 2.)]
-        # G = RRT_star(startpos, endpos, self.obstacles, n_iter, radius, stepSize)
-        # if G.success:
-        #     print("Success")
-        #     path = dijkstra(G)
-        #     path_msg = [geometry_msgs.msg.Point(path[i][0], path[i][1], 0) for i in range(len(path))]
-        #     return path_msg, True
-        self.pub.publish(msg)
-
-    def start_node(self):
-        rospy.init_node(self.node_name)
-        print("Planner node has been initialized")        
-        while True:
-            pass
+        print("Sending trajectory...")
+        ctrl_msg = self.form_control_msg(start=True, walk=True, side_start=False,
+                                        gait_type=1, x=0.0, y=0.0, height=140.0, q_w=1.0, q_x=0.0, q_y=0.0, q_z=0.0,
+                                        slant_x=150.0, slant_y=0.0, step_height=50.0)
+        time.sleep(3) # Wait 10 seconds for execution TO DO: add wycon system for feedback
+        self.pub.publish(ctrl_msg)
+        ctrl_msg = self.form_control_msg(start=True, walk=True, side_start=False,
+                                        gait_type=1, x=0.0, y=0.0, height=180.0, q_w=1.0, q_x=0.0, q_y=0.0, q_z=0.0,
+                                        slant_x=0.0, slant_y=150.0, step_height=50.0)
+        time.sleep(3)
+        self.pub.publish(ctrl_msg)
+        ctrl_msg = self.form_control_msg(start=True, walk=True, side_start=False,
+                                        gait_type=1, x=0.0, y=0.0, height=140.0, q_w=1.0, q_x=0.0, q_y=0.0, q_z=0.0,
+                                        slant_x=-150.0, slant_y=0.0, step_height=50.0)
+        time.sleep(3)
+        self.pub.publish(ctrl_msg)
+        ctrl_msg = self.form_control_msg(start=True, walk=True, side_start=False,
+                                        gait_type=1, x=0.0, y=0.0, height=180.0, q_w=1.0, q_x=0.0, q_y=0.0, q_z=0.0,
+                                        slant_x=0.0, slant_y=-150.0, step_height=50.0)
+        time.sleep(3)
+        self.pub.publish(ctrl_msg)
+      
     
     def addCollisionObject(self, obstacles):
         for obstacle in obstacles:
             self.obstacles.append()
 
 
-def handle_planning_request(req):
-    print("Planning trajectory...")
-    startpos = (0., 0.)
-    endpos = (5., 5.)
-    n_iter = 200
-    radius = 0.5
-    stepSize = 0.2
-    obstacles = [(1., 1.), (2., 2.)]
-    print(f"Start: {req.start}, goal: {req.goal}")
-    G = RRT_star(startpos, endpos, obstacles, n_iter, radius, stepSize)
-    if G.success:
-        print("Success")
-        path = dijkstra(G)
-        path_msg = [geometry_msgs.msg.Point(path[i][0], path[i][1], 0) for i in range(len(path))]
-        # for point in path:
-        return path_msg, True
-
-
-if __name__ == "__main__":
+def main():
     planner_node = Planner_Node()
-    planner_node.start_node()
 
+
+if __name__ == '__main__':
+    main()
