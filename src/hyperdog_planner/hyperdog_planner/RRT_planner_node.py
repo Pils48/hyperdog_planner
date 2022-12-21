@@ -25,6 +25,7 @@ class Line():
 
 def Intersection(line, center, radius):
     ''' Check line-sphere (circle) intersection '''
+    center = center[:2]
     a = np.dot(line.dirn, line.dirn)
     b = 2 * np.dot(line.dirn, line.p - center)
     c = np.dot(line.p - center, line.p - center) - radius * radius
@@ -44,7 +45,7 @@ def Intersection(line, center, radius):
 
 
 def distance(x, y):
-    return np.linalg.norm(np.array(x) - np.array(y))
+    return np.linalg.norm(np.array(x[:2]) - np.array(y))
 
 
 def isInObstacle(vex, obstacles, radius):
@@ -348,33 +349,63 @@ class Planner_Node():
         return msg
 
 
+    def mean_smoothing(self, path):
+        path = np.array(path)
+        window_size = 5
+        i = 0
+        # Initialize an empty list to store moving averages
+        moving_averages = []
+        # Loop through the array t o
+        #consider every window of size 3
+        while i < len(path) - window_size + 1:
+            # Calculate the average of current window
+            window_average = [round(np.sum(path[i:i+window_size, 0]) / window_size, 2), round(np.sum(path[i:i+window_size, 1]) / window_size, 2)]
+            # Store the average of current
+            # window in moving average list
+            moving_averages.append(window_average)
+            # Shift window to right by one position
+            i += 1
+        moving_averages = [[path[0, 0], path[0, 1]]] + moving_averages
+        moving_averages.append([path[-1, 0], path[-1, 1]])
+        moving_averages = np.array(moving_averages)
+        return moving_averages
+
+
     def _pub_callback(self):
-        print("Sending trajectory...")
-        ctrl_msg = self.form_control_msg(start=True, walk=True, side_start=False,
-                                        gait_type=1, x=0.0, y=0.0, height=140.0, q_w=1.0, q_x=0.0, q_y=0.0, q_z=0.0,
-                                        slant_x=150.0, slant_y=0.0, step_height=50.0)
-        time.sleep(3) # Wait 10 seconds for execution TO DO: add wycon system for feedback
-        self.pub.publish(ctrl_msg)
-        ctrl_msg = self.form_control_msg(start=True, walk=True, side_start=False,
+        print("Planning trajectory...")
+        startpos = (0., 0.)
+        endpos = (3., 3)
+        obstacles = [(0, 1, 1), (1, 1, 1), (0.5, 2, 1)]
+        n_iter = 500
+        radius = 0.2
+        stepSize = 0.2
+        G = RRT_star(startpos, endpos, obstacles, n_iter, radius, stepSize)
+        if G.success:
+            path = dijkstra(G)
+            print(path)
+            path_msg = np.array([[path[i][0], path[i][1], 0] for i in range(len(path))])
+            path_msg = self.mean_smoothing(path_msg)
+            print(path_msg)
+        # Execution
+        theta = 0
+        slant_vector = np.array([[150], [0]])
+        print("Executing trajectory...") 
+        print(slant_vector.shape)       
+        for i, point in enumerate(path_msg):
+            if i != 0:
+                x = np.array([1, 0])
+                v = np.array([path_msg[i, 0] - path_msg[i-1, 0], 
+                            path_msg[i, 1] - path_msg[i-1, 1]])
+                theta = np.arccos(x.dot(v) / np.sqrt(v[0]**2 + v[1]**2))
+            rotMatrix = np.array([[np.cos(theta), -np.sin(theta)], 
+                            [np.sin(theta),  np.cos(theta)]])
+            current_slant = rotMatrix @ slant_vector
+            ctrl_msg = self.form_control_msg(start=True, walk=True, side_start=False,
                                         gait_type=1, x=0.0, y=0.0, height=180.0, q_w=1.0, q_x=0.0, q_y=0.0, q_z=0.0,
-                                        slant_x=0.0, slant_y=150.0, step_height=50.0)
-        time.sleep(3)
-        self.pub.publish(ctrl_msg)
-        ctrl_msg = self.form_control_msg(start=True, walk=True, side_start=False,
-                                        gait_type=1, x=0.0, y=0.0, height=140.0, q_w=1.0, q_x=0.0, q_y=0.0, q_z=0.0,
-                                        slant_x=-150.0, slant_y=0.0, step_height=50.0)
-        time.sleep(3)
-        self.pub.publish(ctrl_msg)
-        ctrl_msg = self.form_control_msg(start=True, walk=True, side_start=False,
-                                        gait_type=1, x=0.0, y=0.0, height=180.0, q_w=1.0, q_x=0.0, q_y=0.0, q_z=0.0,
-                                        slant_x=0.0, slant_y=-150.0, step_height=50.0)
-        time.sleep(3)
-        self.pub.publish(ctrl_msg)
-      
-    
-    def addCollisionObject(self, obstacles):
-        for obstacle in obstacles:
-            self.obstacles.append()
+                                        slant_x=current_slant[1, 0], slant_y=current_slant[0, 0], step_height=60.0)
+            print(f"Point x: {current_slant[1, 0]}, y: {current_slant[0, 0]}, theta: {theta}")
+            time.sleep(1.5)
+            self.pub.publish(ctrl_msg)
 
 
 def main():
